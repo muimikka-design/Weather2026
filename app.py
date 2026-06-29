@@ -94,11 +94,14 @@ body { background: transparent; }
 # 改用 F-D0047-091 (鄉鎮預報 REST API)，即可同時滿足 36hr 與一週預報，並支援鄉鎮選擇
 @st.cache_data(ttl=3600)
 def fetch_town_weather_data():
-    url = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-091?Authorization=CWA-5BC80F5C-CB99-4081-94E0-AAD02A6D95C1&format=JSON"
+    # ⚠️ 關鍵修正：加上 elementName 參數，只拉取我們需要的欄位，避免 25MB 大檔案造成 Timeout
+    url = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-091?Authorization=CWA-5BC80F5C-CB99-4081-94E0-AAD02A6D95C1&format=JSON&elementName=MinT,MaxT,PoP12h,Wx"
     try:
-        r = requests.get(url, verify=False, timeout=15)
+        r = requests.get(url, verify=False, timeout=20)
         return r.json()['records']['locations']
-    except: return []
+    except Exception as e:
+        print(f"API Error: {e}")
+        return []
 
 @st.cache_data(ttl=600)
 def fetch_alert_data():
@@ -299,7 +302,7 @@ st.markdown("""
       font-size:2.2rem;box-shadow:0 0 30px rgba(56,189,248,0.3);flex-shrink:0;">🌏</div>
     <div>
       <div style="color:#fff;font-size:1.9rem;font-weight:900;letter-spacing:-0.02em;text-shadow:0 2px 20px rgba(0,0,0,0.3);">
-        天氣資訊站</div>
+        台灣生活氣象與防災儀表板</div>
       <div style="color:rgba(255,255,255,0.65);font-size:0.88rem;margin-top:4px;letter-spacing:0.05em;">
         TAIWAN WEATHER &amp; DISASTER PREVENTION DASHBOARD</div>
     </div>
