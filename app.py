@@ -467,51 +467,67 @@ body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08
         import matplotlib
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
-        plt.rcParams['font.sans-serif'] = ['Noto Sans CJK TC', 'Microsoft JhengHei', 'Arial Unicode MS', 'sans-serif']
+        # Streamlit Cloud Linux 環境只有 DejaVu Sans，完全避免中文字型
+        plt.rcParams['font.family'] = 'DejaVu Sans'
         plt.rcParams['axes.unicode_minus'] = False
 
-        fig, ax = plt.subplots(figsize=(10, 4.2))
+        # 先存獨立變數，避免後續迴圈覆蓋 dd
+        wx_labels  = list(dd['Wx'])
+        pop_labels = list(dd['PoP'])
+
+        fig, ax = plt.subplots(figsize=(10, 4.5))
         fig.patch.set_facecolor('#1e293b')
         ax.set_facecolor('#1e293b')
 
         # 填色區域
-        ax.fill_between(x_new, y_min_s, y_max_s, color='#fef08a', alpha=0.12, zorder=1)
+        ax.fill_between(x_new, y_min_s, y_max_s, color='#fef08a', alpha=0.10, zorder=1)
         # 曲線
-        ax.plot(x_new, y_max_s, color='#f87171', linewidth=3.5, alpha=0.9, zorder=2, label='最高溫')
-        ax.plot(x_new, y_min_s, color='#60a5fa', linewidth=3.5, alpha=0.9, zorder=2, label='最低溫')
+        ax.plot(x_new, y_max_s, color='#f87171', linewidth=3.5, alpha=0.9, zorder=2)
+        ax.plot(x_new, y_min_s, color='#60a5fa', linewidth=3.5, alpha=0.9, zorder=2)
         # 節點
-        ax.scatter(x, y_max, s=120, color='#ef4444', edgecolors='#1e293b', linewidths=2.5, zorder=4)
-        ax.scatter(x, y_min, s=120, color='#3b82f6', edgecolors='#1e293b', linewidths=2.5, zorder=4)
+        ax.scatter(x, y_max, s=130, color='#ef4444', edgecolors='#1e293b', linewidths=2.5, zorder=4)
+        ax.scatter(x, y_min, s=130, color='#3b82f6', edgecolors='#1e293b', linewidths=2.5, zorder=4)
 
-        # 先存獨立變數，避免後續迴圈 (d, dd2 等) 覆蓋 dd
-        wx_labels  = list(dd['Wx'])
-        pop_labels = list(dd['PoP'])
-
-        # 標籤（arrowprops color 只接受 hex / tuple，不能用 rgba() CSS 字串）
+        # 標籤：只用 ASCII + 數字，完全不含中文，避免 tofu 方塊
         for i in range(3):
-            ax.annotate(f"{y_max[i]}°C\n{wx_labels[i]}",
-                xy=(i, y_max[i]), xytext=(0, 18), textcoords='offset points',
-                ha='center', va='bottom', fontsize=10, color='#fca5a5', fontweight='bold',
+            # 最高溫（只顯示溫度數字）
+            ax.annotate(f"{y_max[i]}\u00b0C",
+                xy=(i, y_max[i]), xytext=(0, 16), textcoords='offset points',
+                ha='center', va='bottom', fontsize=13, color='#fca5a5', fontweight='bold',
                 arrowprops=dict(arrowstyle='-', color='#f87171', lw=1, alpha=0.3))
-            ax.annotate(f"{y_min[i]}°C\n降雨 {pop_labels[i]}%",
-                xy=(i, y_min[i]), xytext=(0, -22), textcoords='offset points',
-                ha='center', va='top', fontsize=10, color='#93c5fd', fontweight='bold',
+            # 最低溫 + 降雨機率（PoP 是數字，安全）
+            ax.annotate(f"{y_min[i]}\u00b0C  PoP {pop_labels[i]}%",
+                xy=(i, y_min[i]), xytext=(0, -20), textcoords='offset points',
+                ha='center', va='top', fontsize=11, color='#93c5fd', fontweight='bold',
                 arrowprops=dict(arrowstyle='-', color='#60a5fa', lw=1, alpha=0.3))
 
         ax.set_xticks(x)
         ax.set_xticklabels(time_tick_labels, fontsize=11, color='#94a3b8')
-        ax.tick_params(axis='x', colors='#64748b', length=0, pad=8)
+        ax.tick_params(axis='x', colors='#64748b', length=0, pad=10)
         ax.tick_params(axis='y', left=False, labelleft=False)
         for spine in ax.spines.values():
             spine.set_visible(False)
         ax.grid(axis='y', color='#334155', linewidth=1, linestyle='--', alpha=0.5)
 
-        y_pad = max((y_max.max() - y_min.min()) * 0.4, 5)
+        y_pad = max((y_max.max() - y_min.min()) * 0.45, 6)
         ax.set_ylim(y_min.min() - y_pad, y_max.max() + y_pad)
         ax.set_xlim(-0.3, 2.3)
-        fig.tight_layout(pad=1.5)
+        fig.tight_layout(pad=1.8)
         st.pyplot(fig, use_container_width=True)
         plt.close(fig)
+
+        # 圖表下方補天氣描述（HTML emoji，不依賴字型）
+        wx_row_html = "".join([
+            f'<div style="flex:1;text-align:center;">'
+            f'<div style="font-size:1.6rem;margin-bottom:4px;">{get_weather_icon(pop_labels[i], wx_labels[i])}</div>'
+            f'<div style="font-size:0.78rem;color:#94a3b8;line-height:1.4;">{wx_labels[i]}</div>'
+            f'</div>'
+            for i in range(3)
+        ])
+        components.html(
+            f'{COMPONENT_CSS}<style>body{{display:flex;gap:0;padding:4px 8px;}}</style>{wx_row_html}',
+            height=75
+        )
 
     # ── 一週天氣預報 ──
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
