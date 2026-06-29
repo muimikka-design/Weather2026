@@ -483,16 +483,20 @@ body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08
         ax.scatter(x, y_max, s=120, color='#ef4444', edgecolors='#1e293b', linewidths=2.5, zorder=4)
         ax.scatter(x, y_min, s=120, color='#3b82f6', edgecolors='#1e293b', linewidths=2.5, zorder=4)
 
-        # 標籤
+        # 先存獨立變數，避免後續迴圈 (d, dd2 等) 覆蓋 dd
+        wx_labels  = list(dd['Wx'])
+        pop_labels = list(dd['PoP'])
+
+        # 標籤（arrowprops color 只接受 hex / tuple，不能用 rgba() CSS 字串）
         for i in range(3):
-            ax.annotate(f"{y_max[i]}°C\n{dd['Wx'][i]}",
+            ax.annotate(f"{y_max[i]}°C\n{wx_labels[i]}",
                 xy=(i, y_max[i]), xytext=(0, 18), textcoords='offset points',
                 ha='center', va='bottom', fontsize=10, color='#fca5a5', fontweight='bold',
-                arrowprops=dict(arrowstyle='-', color='rgba(248,113,113,0.3)', lw=1))
-            ax.annotate(f"{y_min[i]}°C\n降雨 {dd['PoP'][i]}%",
+                arrowprops=dict(arrowstyle='-', color='#f87171', lw=1, alpha=0.3))
+            ax.annotate(f"{y_min[i]}°C\n降雨 {pop_labels[i]}%",
                 xy=(i, y_min[i]), xytext=(0, -22), textcoords='offset points',
                 ha='center', va='top', fontsize=10, color='#93c5fd', fontweight='bold',
-                arrowprops=dict(arrowstyle='-', color='rgba(96,165,250,0.3)', lw=1))
+                arrowprops=dict(arrowstyle='-', color='#60a5fa', lw=1, alpha=0.3))
 
         ax.set_xticks(x)
         ax.set_xticklabels(time_tick_labels, fontsize=11, color='#94a3b8')
@@ -500,9 +504,7 @@ body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08
         ax.tick_params(axis='y', left=False, labelleft=False)
         for spine in ax.spines.values():
             spine.set_visible(False)
-        ax.axhline(y=ax.get_ylim()[0] if ax.get_ylim() else 0,
-                   color='rgba(255,255,255,0.06)', linewidth=1)
-        ax.grid(axis='y', color='rgba(255,255,255,0.04)', linewidth=1, linestyle='--')
+        ax.grid(axis='y', color='#334155', linewidth=1, linestyle='--', alpha=0.5)
 
         y_pad = max((y_max.max() - y_min.min()) * 0.4, 5)
         ax.set_ylim(y_min.min() - y_pad, y_max.max() + y_pad)
