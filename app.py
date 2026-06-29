@@ -299,7 +299,7 @@ with st.sidebar:
     st.markdown("""
     <div style="padding:12px 0 20px;">
       <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:#475569;margin-bottom:6px;">系統設定</div>
-      <div style="font-size:1.1rem;font-weight:800;color:#f1f5f9;">儀表板控制台</div>
+      <div style="font-size:1.1rem;font-weight:800;color:#f1f5f9;">板控制台</div>
     </div>""", unsafe_allow_html=True)
     selected_loc = st.selectbox("查詢縣市", [loc['locationName'] for loc in weather_data])
     st.markdown("<hr style='border-color:rgba(255,255,255,0.06);margin:20px 0;'>", unsafe_allow_html=True)
@@ -339,7 +339,7 @@ st.markdown("""
       font-size:2.2rem;box-shadow:0 0 30px rgba(56,189,248,0.3);flex-shrink:0;">🌏</div>
     <div>
       <div style="color:#fff;font-size:1.9rem;font-weight:900;letter-spacing:-0.02em;text-shadow:0 2px 20px rgba(0,0,0,0.3);">
-        台灣生活氣象與防災儀表板</div>
+        天氣資訊站</div>
       <div style="color:rgba(255,255,255,0.65);font-size:0.88rem;margin-top:4px;letter-spacing:0.05em;">
         TAIWAN WEATHER &amp; DISASTER PREVENTION DASHBOARD</div>
     </div>
