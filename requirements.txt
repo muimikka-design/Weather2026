@@ -1,6 +1,9 @@
-streamlit
+streamlit>=1.35.0
 pandas
 requests
 urllib3
-matplotlib
 beautifulsoup4
+numpy
+scipy
+matplotlib
+lunar_python
