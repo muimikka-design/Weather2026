@@ -13,7 +13,7 @@ from lunar_python import Lunar
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 st.set_page_config(
-    page_title="台灣生活氣象與防災儀表板",
+    page_title="生活氣象",
     page_icon="🌤️",
     layout="wide",
     initial_sidebar_state="expanded"
