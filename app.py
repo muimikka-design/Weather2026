@@ -286,7 +286,7 @@ st.markdown("""
       font-size:2.2rem;box-shadow:0 0 30px rgba(56,189,248,0.3);flex-shrink:0;">🌏</div>
     <div>
       <div style="color:#fff;font-size:1.9rem;font-weight:900;letter-spacing:-0.02em;text-shadow:0 2px 20px rgba(0,0,0,0.3);">
-        台灣生活氣象與防災儀表板</div>
+        生活天氣預測</div>
       <div style="color:rgba(255,255,255,0.65);font-size:0.88rem;margin-top:4px;letter-spacing:0.05em;">
         TAIWAN WEATHER &amp; DISASTER PREVENTION DASHBOARD</div>
     </div>
