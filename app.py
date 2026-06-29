@@ -13,7 +13,7 @@ from lunar_python import Lunar
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 st.set_page_config(
-    page_title="氣象預測",
+    page_title="台灣生活氣象與防災儀表板",
     page_icon="🌤️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -226,6 +226,59 @@ def make_ring_svg(pct_num, uid):
     transform="rotate(-90 40 40)"/>
 </svg>""", c1
 
+# lunar_python 套件回傳的「納音」為簡體字，這裡轉換為繁體顯示（共 30 組固定值）
+NAYIN_S2T = {
+    "涧下水": "澗下水", "屋上土": "屋上土", "炉中火": "爐中火", "沙中土": "沙中土",
+    "天河水": "天河水", "山下火": "山下火", "海中金": "海中金", "山头火": "山頭火",
+    "大溪水": "大溪水", "覆灯火": "覆燈火", "沙中金": "沙中金", "泉中水": "泉中水",
+    "杨柳木": "楊柳木", "桑柘木": "桑柘木", "金箔金": "金箔金", "大海水": "大海水",
+    "剑锋金": "劍鋒金", "长流水": "長流水", "霹雳火": "霹靂火", "平地木": "平地木",
+    "城头土": "城頭土", "大林木": "大林木", "天上火": "天上火", "大驿土": "大驛土",
+    "路旁土": "路旁土", "壁上土": "壁上土", "松柏木": "松柏木", "钗钏金": "釵釧金",
+    "石榴木": "石榴木", "白蜡金": "白蠟金",
+}
+
+# lunar_python 套件內建節日清單含大量簡體字與中國大陸專屬政治/civic 紀念日（如建黨節、國慶節等），
+# 這裡僅白名單保留與台灣生活相關、且日期計算正確的傳統節日與國際通用節日，並轉換為繁體顯示。
+FESTIVAL_MAP = {
+    "腊八节": "臘八節", "祭灶日": "祭灶日（小年）", "除夕": "除夕",
+    "春节": "春節（農曆新年）", "元宵节": "元宵節", "天穿节": "天穿節（客家天穿日）",
+    "端午节": "端午節", "七夕节": "七夕", "中元节": "中元節",
+    "中秋节": "中秋節", "重阳节": "重陽節",
+    "元旦节": "元旦", "情人节": "情人節", "妇女节": "婦女節",
+    "愚人节": "愚人節", "劳动节": "勞動節", "母亲节": "母親節",
+    "万圣节前夜": "萬聖節前夕", "万圣节": "萬聖節", "感恩节": "感恩節",
+    "平安夜": "平安夜", "圣诞节": "聖誕節",
+}
+
+# 台灣專屬固定日期節日／紀念日（lunar_python 未收錄，或計算出的日期與台灣習慣不同，例如父親節、兒童節）
+TW_FIXED_HOLIDAYS = {
+    (2, 28): "228和平紀念日", (3, 29): "青年節", (4, 4): "兒童節",
+    (8, 8): "父親節", (9, 28): "教師節（孔子誕辰紀念日）",
+    (10, 10): "國慶日（雙十節）", (10, 25): "台灣光復節",
+    (11, 12): "國父誕辰紀念日", (12, 25): "行憲紀念日",
+}
+
+def get_tw_festivals(lunar_obj, month, day, jieqi_today):
+    """整合農曆/國曆節日清單（白名單過濾＋簡轉繁）與台灣固定節日、節氣，回傳節日字串清單。"""
+    festivals = []
+    try:
+        solar_obj = lunar_obj.getSolar()
+        raw = (list(lunar_obj.getFestivals()) + list(lunar_obj.getOtherFestivals())
+               + list(solar_obj.getFestivals()) + list(solar_obj.getOtherFestivals()))
+    except Exception:
+        raw = []
+    for r in raw:
+        label = FESTIVAL_MAP.get(r)
+        if label and label not in festivals:
+            festivals.append(label)
+    tw_label = TW_FIXED_HOLIDAYS.get((month, day))
+    if tw_label and tw_label not in festivals:
+        festivals.append(tw_label)
+    if jieqi_today == "清明" and "清明節（民族掃墓節）" not in festivals:
+        festivals.append("清明節（民族掃墓節）")
+    return festivals
+
 # =============================================
 # 載入資料
 # =============================================
@@ -286,7 +339,7 @@ st.markdown("""
       font-size:2.2rem;box-shadow:0 0 30px rgba(56,189,248,0.3);flex-shrink:0;">🌏</div>
     <div>
       <div style="color:#fff;font-size:1.9rem;font-weight:900;letter-spacing:-0.02em;text-shadow:0 2px 20px rgba(0,0,0,0.3);">
-        台灣天氣預報</div>
+        台灣生活氣象與防災儀表板</div>
       <div style="color:rgba(255,255,255,0.65);font-size:0.88rem;margin-top:4px;letter-spacing:0.05em;">
         TAIWAN WEATHER &amp; DISASTER PREVENTION DASHBOARD</div>
     </div>
@@ -745,6 +798,18 @@ with tab4:
     jq         = lunar.getJieQi()
     jieqi_str  = f"今日 {jq}" if jq else lunar.getPrevJieQi(True).getName()
 
+    # 八字（年柱／月柱／日柱，因未提供出生時辰，故不含時柱，僅供參考）與當日納音五行
+    year_gz   = lunar.getYearInGanZhi()
+    month_gz  = lunar.getMonthInGanZhi()
+    day_gz    = lunar.getDayInGanZhi()
+    bazi_str  = f"{year_gz} {month_gz} {day_gz}"
+    nayin_raw = lunar.getDayNaYin()
+    nayin_str = NAYIN_S2T.get(nayin_raw, nayin_raw)
+
+    # 節日與紀念日自動判斷（例如端午節、中秋節等）
+    festival_list = get_tw_festivals(lunar, m, d, jq)
+    festival_str  = "、".join(festival_list)
+
     # 星期
     weekday_zh = ["一","二","三","四","五","六","日"]
     try:
@@ -791,12 +856,7 @@ body {{ display:flex;justify-content:center;padding:8px 0; }}
 .tag {{ padding:4px 12px;border-radius:100px;font-size:0.8rem;font-weight:600; }}
 .yi-tag {{ background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.25);color:#86efac; }}
 .ji-tag {{ background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#fca5a5; }}
-.footer {{ display:grid;grid-template-columns:1fr 1fr;}}
-.footer-item {{ padding:16px 24px; }}
-.footer-item:first-child {{ border-right:1px solid rgba(220,38,38,0.1); }}
-.fi-label {{ font-size:0.68rem;font-weight:700;text-transform:uppercase;
-  letter-spacing:0.1em;color:#475569;margin-bottom:6px; }}
-.fi-value {{ font-size:0.92rem;font-weight:700;color:#e2e8f0; }}
+.mpill-festival {{ background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);color:#fbbf24; }}
 </style>
 <div class="card">
   <div class="card-header">
@@ -811,6 +871,9 @@ body {{ display:flex;justify-content:center;padding:8px 0; }}
       <div class="meta-pills">
         <div class="mpill">🌿 {jieqi_str}</div>
         <div class="mpill">🔱 {chong_sha}</div>
+        <div class="mpill">🎴 八字 {bazi_str}</div>
+        <div class="mpill">✨ 納音 {nayin_str}</div>
+        {f'<div class="mpill mpill-festival">🎉 {festival_str}</div>' if festival_str else ''}
       </div>
     </div>
   </div>
@@ -828,16 +891,6 @@ body {{ display:flex;justify-content:center;padding:8px 0; }}
     </div>
     <div class="tags">{ji_items}</div>
   </div>
-  <div class="footer">
-    <div class="footer-item">
-      <div class="fi-label">當前節氣</div>
-      <div class="fi-value">🌿 {jieqi_str}</div>
-    </div>
-    <div class="footer-item">
-      <div class="fi-label">沖煞</div>
-      <div class="fi-value">🔱 {chong_sha}</div>
-    </div>
-  </div>
 </div>"""
 
-    components.html(almanac_html, height=520)
+    components.html(almanac_html, height=600, scrolling=True)
