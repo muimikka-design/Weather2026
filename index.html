@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>台灣氣象與防災儀表板</title>
+
+  <!-- ── PWA Meta ── -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
+  <!-- ── Apple PWA Meta ── -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="台灣氣象" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+
+  <!-- ── Apple Splash Screens（選用，給 iPhone 啟動畫面用） ── -->
+  <link rel="apple-touch-startup-image"
+        media="screen and (device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)"
+        href="icons/icon-512x512.png" />
+
+  <!-- ── Favicon ── -->
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512x512.png" />
+
+  <!-- ── SEO ── -->
+  <meta name="description" content="即時台灣天氣預報、停班停課公告與全台水庫水情查詢" />
+  <meta property="og:title" content="台灣氣象與防災儀表板" />
+  <meta property="og:description" content="即時台灣天氣預報、停班停課公告與全台水庫水情查詢" />
+  <meta property="og:image" content="icons/icon-512x512.png" />
+
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: #0f172a;
+      font-family: -apple-system, 'Noto Sans TC', sans-serif;
+      overflow: hidden;
+      /* 支援 iPhone 瀏海 / 底部安全區域 */
+      padding: env(safe-area-inset-top) env(safe-area-inset-right)
+               env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    /* ── 頂部狀態列（僅 standalone 模式顯示） ── */
+    .pwa-topbar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      height: 44px;
+      padding: 0 16px;
+      background: #0f172a;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      flex-shrink: 0;
+    }
+
+    @media all and (display-mode: standalone) {
+      .pwa-topbar { display: flex; }
+    }
+
+    .pwa-topbar-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #f1f5f9;
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    .pwa-topbar-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #34d399;
+      box-shadow: 0 0 6px #34d399;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.6; transform: scale(0.85); }
+    }
+
+    .pwa-topbar-time {
+      font-size: 0.78rem;
+      color: #64748b;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── App 容器 ── */
+    .app-shell {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── iframe 容器 ── */
+    .iframe-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    iframe#streamlit-frame {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #0f172a;
+    }
+
+    /* ── 載入畫面 ── */
+    .splash {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: #0f172a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      transition: opacity 0.5s ease, visibility 0.5s ease;
+    }
+
+    .splash.hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    .splash-icon {
+      width: 96px; height: 96px;
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: 0 0 40px rgba(14, 165, 233, 0.4);
+    }
+
+    .splash-icon img { width: 100%; height: 100%; object-fit: cover; }
+
+    .splash-title {
+      color: #f1f5f9;
+      font-size: 1.25rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      text-align: center;
+    }
+
+    .splash-subtitle {
+      color: #475569;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      text-align: center;
+    }
+
+    .splash-loader {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .splash-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #0ea5e9;
+      animation: bounce 1.4s ease-in-out infinite;
+    }
+    .splash-dot:nth-child(2) { animation-delay: 0.16s; background: #6366f1; }
+    .splash-dot:nth-child(3) { animation-delay: 0.32s; background: #34d399; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.5; }
+      40%           { transform: translateY(-10px); opacity: 1; }
+    }
+
+    /* ── 離線提示橫幅 ── */
+    .offline-banner {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 36px;
+      background: linear-gradient(90deg, rgba(239,68,68,0.15), rgba(220,38,38,0.1));
+      border-bottom: 1px solid rgba(239,68,68,0.3);
+      color: #fca5a5;
+      font-size: 0.78rem;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .offline-banner.show { display: flex; }
+
+    /* ── 安裝提示（Android Chrome） ── */
+    .install-prompt {
+      display: none;
+      position: fixed;
+      bottom: max(24px, env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: #1e293b;
+      border: 1px solid rgba(14,165,233,0.3);
+      border-radius: 16px;
+      padding: 16px 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      width: min(calc(100vw - 32px), 360px);
+      animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @keyframes slideUp {
+      from { transform: translateX(-50%) translateY(20px); opacity: 0; }
+      to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+    }
+
+    .install-prompt.show { display: block; }
+
+    .install-prompt-inner {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .install-prompt-icon {
+      width: 48px; height: 48px;
+      border-radius: 12px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .install-prompt-icon img { width: 100%; height: 100%; object-fit: cover; }
+
+    .install-prompt-text { flex: 1; }
+
+    .install-prompt-title {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 3px;
+    }
+
+    .install-prompt-desc {
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+
+    .install-prompt-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .btn-install {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #0ea5e9, #6366f1);
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn-install:active { opacity: 0.8; }
+
+    .btn-dismiss {
+      padding: 10px 16px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      background: transparent;
+      color: #64748b;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    /* ── iOS 安裝指引 ── */
+    .ios-guide {
+      display: none;
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 1000;
+      background: #1e293b;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px 20px 0 0;
+      padding: 20px 24px max(24px, env(safe-area-inset-bottom));
+      box-shadow: 0 -20px 60px rgba(0,0,0,0.5);
+      animation: slideUp 0.3s ease;
+    }
+
+    .ios-guide.show { display: block; }
+
+    .ios-guide-handle {
+      width: 36px; height: 4px;
+      border-radius: 2px;
+      background: rgba(255,255,255,0.15);
+      margin: 0 auto 16px;
+    }
+
+    .ios-guide-title {
+      font-size: 1rem;
+      font-weight: 800;
+      color: #f1f5f9;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+
+    .ios-guide-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .ios-step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .ios-step-num {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0ea5e9, #6366f1);
+      color: #fff;
+      font-size: 0.82rem;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .ios-step-text {
+      font-size: 0.88rem;
+      color: #cbd5e1;
+      line-height: 1.4;
+    }
+
+    .ios-step-text strong { color: #f1f5f9; }
+
+    .ios-close {
+      width: 100%;
+      margin-top: 20px;
+      padding: 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      background: transparent;
+      color: #64748b;
+      font-size: 0.88rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── 載入畫面 ── -->
+<div class="splash" id="splash">
+  <div class="splash-icon">
+    <img src="icons/icon-192x192.png" alt="台灣氣象" />
+  </div>
+  <div>
+    <div class="splash-title">台灣氣象與防災儀表板</div>
+    <div class="splash-subtitle">Taiwan Weather Dashboard</div>
+  </div>
+  <div class="splash-loader">
+    <div class="splash-dot"></div>
+    <div class="splash-dot"></div>
+    <div class="splash-dot"></div>
+  </div>
+</div>
+
+<!-- ── 主 App 殼 ── -->
+<div class="app-shell">
+
+  <!-- 離線提示 -->
+  <div class="offline-banner" id="offline-banner">
+    ⚠️ 目前離線，部分資料可能不是最新的
+  </div>
+
+  <!-- PWA 頂欄（僅 standalone 模式） -->
+  <div class="pwa-topbar">
+    <div class="pwa-topbar-title">
+      🌤️ 台灣氣象儀表板
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div class="pwa-topbar-dot"></div>
+      <div class="pwa-topbar-time" id="clock"></div>
+    </div>
+  </div>
+
+  <!-- Streamlit iframe -->
+  <div class="iframe-wrap">
+    <!--
+    <iframe
+      id="streamlit-frame"
+      src="https://weather2026-mha6sx5bsvvfs5l9t6cpne.streamlit.app?embedded=true"
+      title="台灣氣象與防災儀表板"
+      allow="geolocation"
+      loading="lazy"
+    ></iframe>
+  </div>
+
+</div>
+
+<!-- ── Android 安裝提示 ── -->
+<div class="install-prompt" id="install-prompt">
+  <div class="install-prompt-inner">
+    <div class="install-prompt-icon">
+      <img src="icons/icon-192x192.png" alt="icon" />
+    </div>
+    <div class="install-prompt-text">
+      <div class="install-prompt-title">加入主畫面</div>
+      <div class="install-prompt-desc">像 App 一樣使用，支援離線快取</div>
+    </div>
+  </div>
+  <div class="install-prompt-actions">
+    <button class="btn-install" id="btn-install">📲 立即安裝</button>
+    <button class="btn-dismiss" id="btn-dismiss">稍後</button>
+  </div>
+</div>
+
+<!-- ── iOS 安裝指引 ── -->
+<div class="ios-guide" id="ios-guide">
+  <div class="ios-guide-handle"></div>
+  <div class="ios-guide-title">📲 加入主畫面</div>
+  <div class="ios-guide-steps">
+    <div class="ios-step">
+      <div class="ios-step-num">1</div>
+      <div class="ios-step-text">點下方 <strong>分享按鈕</strong>（□ 箭頭朝上的圖示）</div>
+    </div>
+    <div class="ios-step">
+      <div class="ios-step-num">2</div>
+      <div class="ios-step-text">在選單中找到 <strong>「加入主畫面」</strong></div>
+    </div>
+    <div class="ios-step">
+      <div class="ios-step-num">3</div>
+      <div class="ios-step-text">點右上角 <strong>「新增」</strong> 完成安裝</div>
+    </div>
+  </div>
+  <button class="ios-close" id="ios-close">我知道了</button>
+</div>
+
+
+<script>
+// ── Service Worker 註冊 ────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(reg => console.log('SW registered:', reg.scope))
+      .catch(err => console.warn('SW failed:', err));
+  });
+}
+
+// ── 時鐘 ──────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2, '0');
+  const m = String(now.getMinutes()).padStart(2, '0');
+  const el = document.getElementById('clock');
+  if (el) el.textContent = `${h}:${m}`;
+}
+updateClock();
+setInterval(updateClock, 30000);
+
+// ── iframe 載入完成後隱藏 Splash ──────────────────────────
+const frame = document.getElementById('streamlit-frame');
+const splash = document.getElementById('splash');
+
+// 最多等 8 秒後強制隱藏 splash
+let splashTimeout = setTimeout(() => splash.classList.add('hidden'), 8000);
+
+frame.addEventListener('load', () => {
+  clearTimeout(splashTimeout);
+  setTimeout(() => splash.classList.add('hidden'), 800);
+});
+
+// ── 離線偵測 ──────────────────────────────────────────────
+const offlineBanner = document.getElementById('offline-banner');
+function updateOnlineStatus() {
+  offlineBanner.classList.toggle('show', !navigator.onLine);
+}
+window.addEventListener('online',  updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+updateOnlineStatus();
+
+// ── Android 安裝提示 ──────────────────────────────────────
+let deferredPrompt = null;
+const installPrompt = document.getElementById('install-prompt');
+const btnInstall   = document.getElementById('btn-install');
+const btnDismiss   = document.getElementById('btn-dismiss');
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  // 延遲 3 秒再顯示，讓使用者先看到內容
+  setTimeout(() => installPrompt.classList.add('show'), 3000);
+});
+
+btnInstall.addEventListener('click', async () => {
+  if (!deferredPrompt) return;
+  installPrompt.classList.remove('show');
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  console.log('Install outcome:', outcome);
+  deferredPrompt = null;
+});
+
+btnDismiss.addEventListener('click', () => {
+  installPrompt.classList.remove('show');
+  sessionStorage.setItem('install-dismissed', '1');
+});
+
+// 已安裝後移除提示
+window.addEventListener('appinstalled', () => {
+  installPrompt.classList.remove('show');
+  deferredPrompt = null;
+});
+
+// ── iOS 安裝指引 ──────────────────────────────────────────
+const iosGuide  = document.getElementById('ios-guide');
+const iosClose  = document.getElementById('ios-close');
+
+const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+const isInStandaloneMode = window.matchMedia('(display-mode: standalone)').matches
+  || window.navigator.standalone === true;
+
+if (isIos && !isInStandaloneMode && !sessionStorage.getItem('ios-guide-shown')) {
+  setTimeout(() => {
+    iosGuide.classList.add('show');
+    sessionStorage.setItem('ios-guide-shown', '1');
+  }, 4000);
+}
+
+iosClose.addEventListener('click', () => iosGuide.classList.remove('show'));
+
+// 點擊背景關閉 iOS 指引
+document.addEventListener('click', e => {
+  if (iosGuide.classList.contains('show') && !iosGuide.contains(e.target)) {
+    iosGuide.classList.remove('show');
+  }
+});
+</script>
+
+</body>
+</html>

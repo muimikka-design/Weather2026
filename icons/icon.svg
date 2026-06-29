@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <!-- 夜空到晴天漸層 -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="60%" y2="100%">
+      <stop offset="0%"   stop-color="#0D1B4B"/>
+      <stop offset="45%"  stop-color="#1565C0"/>
+      <stop offset="100%" stop-color="#039BE5"/>
+    </linearGradient>
+    <!-- 太陽橘黃漸層 -->
+    <linearGradient id="sun" x1="20%" y1="20%" x2="80%" y2="80%">
+      <stop offset="0%"   stop-color="#FFE082"/>
+      <stop offset="100%" stop-color="#F57F17"/>
+    </linearGradient>
+    <!-- 太陽光暈 -->
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#FFD54F" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#FFD54F" stop-opacity="0"/>
+    </radialGradient>
+    <!-- 雲漸層 -->
+    <linearGradient id="cloud" x1="0%" y1="0%" x2="30%" y2="100%">
+      <stop offset="0%"   stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#DCEEFB"/>
+    </linearGradient>
+    <!-- 雲陰影 -->
+    <linearGradient id="cloud-shadow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#BBDEFB"/>
+      <stop offset="100%" stop-color="#90CAF9"/>
+    </linearGradient>
+    <filter id="cloud-drop" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0D47A1" flood-opacity="0.25"/>
+    </filter>
+    <filter id="sun-drop">
+      <feDropShadow dx="0" dy="4" stdDeviation="10" flood-color="#FF8F00" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- 背景（無圓角，iOS 自動裁切；maskable 版本才需要全滿） -->
+  <rect width="512" height="512" rx="90" fill="url(#bg)"/>
+
+  <!-- 星星點點 -->
+  <circle cx="90"  cy="75"  r="5"   fill="white" opacity="0.75"/>
+  <circle cx="170" cy="48"  r="3.5" fill="white" opacity="0.55"/>
+  <circle cx="380" cy="60"  r="4.5" fill="white" opacity="0.70"/>
+  <circle cx="455" cy="100" r="3"   fill="white" opacity="0.50"/>
+  <circle cx="320" cy="38"  r="3.5" fill="white" opacity="0.60"/>
+  <circle cx="60"  cy="150" r="2.5" fill="white" opacity="0.40"/>
+  <circle cx="440" cy="175" r="2.5" fill="white" opacity="0.35"/>
+
+  <!-- 太陽光暈 -->
+  <circle cx="300" cy="195" r="130" fill="url(#glow)"/>
+
+  <!-- 太陽本體 -->
+  <circle cx="300" cy="195" r="82" fill="url(#sun)" filter="url(#sun-drop)"/>
+
+  <!-- 太陽光芒（8 條，長短交替） -->
+  <g stroke="#FFD54F" stroke-linecap="round" opacity="0.85">
+    <line x1="300" y1="78"  x2="300" y2="50"  stroke-width="11"/>
+    <line x1="300" y1="312" x2="300" y2="340" stroke-width="11"/>
+    <line x1="183" y1="195" x2="155" y2="195" stroke-width="11"/>
+    <line x1="417" y1="195" x2="445" y2="195" stroke-width="11"/>
+    <!-- 斜向 -->
+    <line x1="217" y1="112" x2="196" y2="91"  stroke-width="9"/>
+    <line x1="383" y1="112" x2="404" y2="91"  stroke-width="9"/>
+    <line x1="217" y1="278" x2="196" y2="299" stroke-width="9"/>
+    <line x1="383" y1="278" x2="404" y2="299" stroke-width="9"/>
+  </g>
+
+  <!-- 雲朵（前景，蓋住太陽下半部，有陰影層次） -->
+  <!-- 雲底陰影層 -->
+  <g opacity="0.4">
+    <ellipse cx="195" cy="358" rx="78"  ry="48"  fill="#90CAF9"/>
+    <ellipse cx="272" cy="338" rx="95"  ry="58"  fill="#90CAF9"/>
+    <ellipse cx="362" cy="350" rx="72"  ry="45"  fill="#90CAF9"/>
+    <ellipse cx="430" cy="365" rx="58"  ry="38"  fill="#90CAF9"/>
+    <rect x="117" y="358" width="371" height="90" fill="#90CAF9" rx="8"/>
+  </g>
+  <!-- 雲主體 -->
+  <g filter="url(#cloud-drop)">
+    <ellipse cx="190" cy="344" rx="80"  ry="50"  fill="url(#cloud)"/>
+    <ellipse cx="268" cy="322" rx="97"  ry="62"  fill="url(#cloud)"/>
+    <ellipse cx="360" cy="336" rx="73"  ry="47"  fill="url(#cloud)"/>
+    <ellipse cx="425" cy="352" rx="60"  ry="40"  fill="url(#cloud)"/>
+    <ellipse cx="130" cy="355" rx="55"  ry="36"  fill="url(#cloud)"/>
+    <rect x="125" y="350" width="365" height="100" fill="url(#cloud)" rx="6"/>
+  </g>
+</svg>
