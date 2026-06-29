@@ -1,65 +1,44 @@
-// ============================================================
-// Service Worker — 台灣氣象 PWA
-// 策略：Shell 靜態資源永久快取 + iframe 網路優先
-// ============================================================
-
-const CACHE_NAME = 'taiwan-weather-pwa-v1';
-const CACHE_URLS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icons/icon-192x192.png',
-  '/icons/icon-512x512.png',
-  '/icons/apple-touch-icon.png',
+const CACHE = 'tw-weather-v2';
+const BASE  = '/Weather2026';
+const SHELL = [
+  BASE + '/',
+  BASE + '/index.html',
+  BASE + '/manifest.json',
+  BASE + '/icons/icon-192x192.png',
+  BASE + '/icons/icon-512x512.png',
+  BASE + '/icons/apple-touch-icon.png',
 ];
 
-// ── 安裝：快取 Shell 資源 ──────────────────────────────────
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(CACHE_URLS))
-  );
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
   self.skipWaiting();
 });
 
-// ── 啟動：清除舊快取 ──────────────────────────────────────
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys
-          .filter(k => k !== CACHE_NAME)
-          .map(k => caches.delete(k))
-      )
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(ks =>
+      Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))
     )
   );
   self.clients.claim();
 });
 
-// ── 攔截請求 ─────────────────────────────────────────────
-self.addEventListener('fetch', event => {
-  const { request } = event;
-  const url = new URL(request.url);
-
-  // 跨域請求（Streamlit iframe、API）一律直接走網路，不快取
+self.addEventListener('fetch', e => {
+  const url = new URL(e.request.url);
+  // 跨域（Streamlit API）直接走網路
   if (url.origin !== self.location.origin) {
-    event.respondWith(fetch(request).catch(() => new Response('', { status: 503 })));
+    e.respondWith(fetch(e.request).catch(() => new Response('', { status: 503 })));
     return;
   }
-
-  // Shell 資源：Cache First
-  event.respondWith(
-    caches.match(request).then(cached => {
-      if (cached) return cached;
-      return fetch(request).then(response => {
-        if (response && response.status === 200 && request.method === 'GET') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+  // Shell：Cache First
+  e.respondWith(
+    caches.match(e.request).then(cached => cached ||
+      fetch(e.request).then(res => {
+        if (res && res.status === 200 && e.request.method === 'GET') {
+          caches.open(CACHE).then(c => c.put(e.request, res.clone()));
         }
-        return response;
-      });
-    }).catch(() =>
-      // 離線 fallback：回傳主頁
-      caches.match('/index.html')
-    )
+        return res;
+      })
+    ).catch(() => caches.match(BASE + '/index.html'))
   );
 });
