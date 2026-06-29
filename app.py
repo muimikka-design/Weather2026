@@ -239,7 +239,7 @@ NAYIN_S2T = {
 }
 
 # lunar_python 套件內建節日清單含大量簡體字與中國大陸專屬政治/civic 紀念日（如建黨節、國慶節等），
-# 這裡僅白名單保留與台灣生活相關、且日期計算正確的傳統節日與國際通用節日，並轉換為繁體顯示。
+# 這裡僅白名單保留與生活相關、且日期計算正確的傳統節日與國際通用節日，並轉換為繁體顯示。
 FESTIVAL_MAP = {
     "腊八节": "臘八節", "祭灶日": "祭灶日（小年）", "除夕": "除夕",
     "春节": "春節（農曆新年）", "元宵节": "元宵節", "天穿节": "天穿節（客家天穿日）",
@@ -251,16 +251,16 @@ FESTIVAL_MAP = {
     "平安夜": "平安夜", "圣诞节": "聖誕節",
 }
 
-# 台灣專屬固定日期節日／紀念日（lunar_python 未收錄，或計算出的日期與台灣習慣不同，例如父親節、兒童節）
+# 專屬固定日期節日／紀念日（lunar_python 未收錄，或計算出的日期與習慣不同，例如父親節、兒童節）
 TW_FIXED_HOLIDAYS = {
     (2, 28): "228和平紀念日", (3, 29): "青年節", (4, 4): "兒童節",
     (8, 8): "父親節", (9, 28): "教師節（孔子誕辰紀念日）",
-    (10, 10): "國慶日（雙十節）", (10, 25): "台灣光復節",
+    (10, 10): "國慶日（雙十節）", (10, 25): "光復節",
     (11, 12): "國父誕辰紀念日", (12, 25): "行憲紀念日",
 }
 
 def get_tw_festivals(lunar_obj, month, day, jieqi_today):
-    """整合農曆/國曆節日清單（白名單過濾＋簡轉繁）與台灣固定節日、節氣，回傳節日字串清單。"""
+    """整合農曆/國曆節日清單（白名單過濾＋簡轉繁）與固定節日、節氣，回傳節日字串清單。"""
     festivals = []
     try:
         solar_obj = lunar_obj.getSolar()
@@ -306,7 +306,7 @@ with st.sidebar:
     for emoji, title, src in [
         ("🌐", "中央氣象署", "天氣預報 & 特報"),
         ("📋", "人事行政總處", "停班停課公告"),
-        ("💧", "台灣水庫水情", "即時蓄水資料"),
+        ("💧", "水庫水情", "即時蓄水資料"),
         ("📅", "Lunar-Python", "農民曆演算法"),
     ]:
         st.markdown(f"""
@@ -339,7 +339,7 @@ st.markdown("""
       font-size:2.2rem;box-shadow:0 0 30px rgba(56,189,248,0.3);flex-shrink:0;">🌏</div>
     <div>
       <div style="color:#fff;font-size:1.9rem;font-weight:900;letter-spacing:-0.02em;text-shadow:0 2px 20px rgba(0,0,0,0.3);">
-        台灣生活氣象與防災儀表板</div>
+        天氣預報</div>
       <div style="color:rgba(255,255,255,0.65);font-size:0.88rem;margin-top:4px;letter-spacing:0.05em;">
         TAIWAN WEATHER &amp; DISASTER PREVENTION DASHBOARD</div>
     </div>
