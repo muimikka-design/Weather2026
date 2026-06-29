@@ -12,11 +12,12 @@ from lunar_python import Lunar
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# 隱藏側邊欄，讓手機版體驗更好
 st.set_page_config(
     page_title="台灣生活氣象與防災儀表板",
     page_icon="🌤️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # =============================================
@@ -27,11 +28,7 @@ SHARED_CSS = """
 html, body, [class*="css"] { font-family: 'Noto Sans TC', sans-serif !important; }
 #MainMenu, footer, header { visibility: hidden; }
 .stApp { background: #0f172a !important; }
-[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%) !important;
-    border-right: 1px solid rgba(255,255,255,0.06);
-}
-[data-testid="stSidebar"] * { color: #cbd5e1 !important; }
+[data-testid="collapsedControl"] { display: none !important; } /* 徹底隱藏側邊欄漢堡按鈕 */
 .stTabs [data-baseweb="tab-list"] {
     background: rgba(255,255,255,0.04) !important;
     border-radius: 14px; padding: 6px; gap: 4px;
@@ -93,20 +90,14 @@ body { background: transparent; }
 # =============================================
 # 資料抓取
 # =============================================
-@st.cache_data(ttl=3600)
-def fetch_weather_data():
-    url = "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/F-C0032-001?Authorization=CWA-5BC80F5C-CB99-4081-94E0-AAD02A6D95C1&downloadType=WEB&format=JSON"
-    try:
-        r = requests.get(url, verify=False, timeout=10)
-        return r.json()['cwaopendata']['dataset']['location']
-    except: return []
 
+# 改用 F-D0047-091 (鄉鎮預報 REST API)，即可同時滿足 36hr 與一週預報，並支援鄉鎮選擇
 @st.cache_data(ttl=3600)
-def fetch_weekly_weather_data():
-    url = "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/F-C0032-005?Authorization=CWA-5BC80F5C-CB99-4081-94E0-AAD02A6D95C1&downloadType=WEB&format=JSON"
+def fetch_town_weather_data():
+    url = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/F-D0047-091?Authorization=CWA-5BC80F5C-CB99-4081-94E0-AAD02A6D95C1&format=JSON"
     try:
-        r = requests.get(url, verify=False, timeout=10)
-        return r.json()['cwaopendata']['dataset']['location']
+        r = requests.get(url, verify=False, timeout=15)
+        return r.json()['records']['locations']
     except: return []
 
 @st.cache_data(ttl=600)
@@ -226,7 +217,6 @@ def make_ring_svg(pct_num, uid):
     transform="rotate(-90 40 40)"/>
 </svg>""", c1
 
-# lunar_python 套件回傳的「納音」為簡體字，這裡轉換為繁體顯示（共 30 組固定值）
 NAYIN_S2T = {
     "涧下水": "澗下水", "屋上土": "屋上土", "炉中火": "爐中火", "沙中土": "沙中土",
     "天河水": "天河水", "山下火": "山下火", "海中金": "海中金", "山头火": "山頭火",
@@ -238,8 +228,6 @@ NAYIN_S2T = {
     "石榴木": "石榴木", "白蜡金": "白蠟金",
 }
 
-# lunar_python 套件內建節日清單含大量簡體字與中國大陸專屬政治/civic 紀念日（如建黨節、國慶節等），
-# 這裡僅白名單保留與台灣生活相關、且日期計算正確的傳統節日與國際通用節日，並轉換為繁體顯示。
 FESTIVAL_MAP = {
     "腊八节": "臘八節", "祭灶日": "祭灶日（小年）", "除夕": "除夕",
     "春节": "春節（農曆新年）", "元宵节": "元宵節", "天穿节": "天穿節（客家天穿日）",
@@ -251,7 +239,6 @@ FESTIVAL_MAP = {
     "平安夜": "平安夜", "圣诞节": "聖誕節",
 }
 
-# 台灣專屬固定日期節日／紀念日（lunar_python 未收錄，或計算出的日期與台灣習慣不同，例如父親節、兒童節）
 TW_FIXED_HOLIDAYS = {
     (2, 28): "228和平紀念日", (3, 29): "青年節", (4, 4): "兒童節",
     (8, 8): "父親節", (9, 28): "教師節（孔子誕辰紀念日）",
@@ -260,7 +247,6 @@ TW_FIXED_HOLIDAYS = {
 }
 
 def get_tw_festivals(lunar_obj, month, day, jieqi_today):
-    """整合農曆/國曆節日清單（白名單過濾＋簡轉繁）與台灣固定節日、節氣，回傳節日字串清單。"""
     festivals = []
     try:
         solar_obj = lunar_obj.getSolar()
@@ -282,8 +268,7 @@ def get_tw_festivals(lunar_obj, month, day, jieqi_today):
 # =============================================
 # 載入資料
 # =============================================
-weather_data = fetch_weather_data()
-weekly_weather_data = fetch_weekly_weather_data()
+weather_data = fetch_town_weather_data()
 alert_data   = fetch_alert_data()
 closure_time, closure_df = fetch_typhoon_data()
 reservoir_df = fetch_reservoir_data()
@@ -292,31 +277,6 @@ if not weather_data:
     st.error("氣象資料載入失敗，請稍後再試。")
     st.stop()
 
-# =============================================
-# 側邊欄
-# =============================================
-with st.sidebar:
-    st.markdown("""
-    <div style="padding:12px 0 20px;">
-      <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:#475569;margin-bottom:6px;">系統設定</div>
-      <div style="font-size:1.1rem;font-weight:800;color:#f1f5f9;">儀表板控制台</div>
-    </div>""", unsafe_allow_html=True)
-    selected_loc = st.selectbox("查詢縣市", [loc['locationName'] for loc in weather_data])
-    st.markdown("<hr style='border-color:rgba(255,255,255,0.06);margin:20px 0;'>", unsafe_allow_html=True)
-    for emoji, title, src in [
-        ("🌐", "中央氣象署", "天氣預報 & 特報"),
-        ("📋", "人事行政總處", "停班停課公告"),
-        ("💧", "台灣水庫水情", "即時蓄水資料"),
-        ("📅", "Lunar-Python", "農民曆演算法"),
-    ]:
-        st.markdown(f"""
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
-          <div style="font-size:1.1rem;">{emoji}</div>
-          <div>
-            <div style="font-size:0.82rem;font-weight:600;color:#94a3b8;">{title}</div>
-            <div style="font-size:0.72rem;color:#475569;">{src}</div>
-          </div>
-        </div>""", unsafe_allow_html=True)
 
 # =============================================
 # 頁首橫幅
@@ -339,7 +299,7 @@ st.markdown("""
       font-size:2.2rem;box-shadow:0 0 30px rgba(56,189,248,0.3);flex-shrink:0;">🌏</div>
     <div>
       <div style="color:#fff;font-size:1.9rem;font-weight:900;letter-spacing:-0.02em;text-shadow:0 2px 20px rgba(0,0,0,0.3);">
-        天氣資訊站</div>
+        台灣生活氣象與防災儀表板</div>
       <div style="color:rgba(255,255,255,0.65);font-size:0.88rem;margin-top:4px;letter-spacing:0.05em;">
         TAIWAN WEATHER &amp; DISASTER PREVENTION DASHBOARD</div>
     </div>
@@ -360,145 +320,173 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 
 # ─────────────────────────────────────────────
-# 分頁 1：氣象預報
+# 分頁 1：氣象預報 (包含新移入的縣市與行政區選擇)
 # ─────────────────────────────────────────────
 with tab1:
-    target_loc = next(loc for loc in weather_data if loc['locationName'] == selected_loc)
-    dd = {"MinT": [], "MaxT": [], "PoP": [], "Wx": [], "time_short": [], "time_full": []}
-    for elem in target_loc['weatherElement']:
-        n = elem['elementName']
-        if n == "MinT":   dd["MinT"] = [int(t['parameter']['parameterName']) for t in elem['time']]
-        elif n == "MaxT": dd["MaxT"] = [int(t['parameter']['parameterName']) for t in elem['time']]
-        elif n == "PoP":  dd["PoP"]  = [int(t['parameter']['parameterName']) for t in elem['time']]
-        elif n == "Wx":
-            dd["Wx"] = [t['parameter']['parameterName'] for t in elem['time']]
-            dd["time_short"] = [t['startTime'][5:10] for t in elem['time']]
-            dd["time_full"]  = [t['startTime'] for t in elem['time']]
-
-    icons    = [get_weather_icon(dd["PoP"][i], dd["Wx"][i]) for i in range(3)]
-    hero_bg  = get_hero_bg(dd["PoP"][0], dd["Wx"][0])
-    avg_temp = (dd["MinT"][0] + dd["MaxT"][0]) // 2
-
-    # 警報橫幅
-    alerts = alert_data.get(selected_loc, [])
-    if alerts:
-        st.markdown(f"""<div class="alert-banner alert-danger">
-          <span style="font-size:1.4rem;">🚨</span>
-          <span><strong>天氣警特報</strong>｜{selected_loc} 目前發布：<strong>{"、".join(alerts)}</strong>，請多加留意</span>
-        </div>""", unsafe_allow_html=True)
-    else:
-        st.markdown(f"""<div class="alert-banner alert-safe">
-          <span style="font-size:1.3rem;">✅</span>
-          <span><strong>{selected_loc}</strong> 目前無重大天氣警特報，天氣狀況良好</span>
-        </div>""", unsafe_allow_html=True)
-
-    # 英雄卡 + 降雨機率
-    col_hero, col_chart = st.columns([7, 3])
-    with col_hero:
-        pop0 = dd["PoP"][0]
-        hero_html = f"""{COMPONENT_CSS}
-.hero {{ position:relative;overflow:hidden;border-radius:24px;padding:36px 40px;
-  background:{hero_bg};display:flex;align-items:center;justify-content:space-between;
-  box-shadow:0 20px 50px rgba(0,0,0,0.4); }}
-.hero::before {{ content:'';position:absolute;right:-30px;top:-30px;width:240px;height:240px;
-  border-radius:50%;background:rgba(255,255,255,0.04);pointer-events:none; }}
-.label {{ font-size:0.82rem;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;
-  color:rgba(255,255,255,0.6);margin-bottom:8px; }}
-.temp {{ font-size:5.5rem;font-weight:900;color:#fff;line-height:1;letter-spacing:-0.04em;
-  text-shadow:0 4px 30px rgba(0,0,0,0.3); }}
-.unit {{ font-size:2rem;font-weight:300;opacity:.7;vertical-align:super; }}
-.wx {{ font-size:1.25rem;color:rgba(255,255,255,0.85);font-weight:500;margin-top:8px; }}
-.meta {{ display:flex;gap:16px;margin-top:14px; }}
-.pill {{ background:rgba(255,255,255,0.12);backdrop-filter:blur(8px);
-  border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.9);
-  padding:5px 14px;border-radius:100px;font-size:0.82rem;font-weight:500; }}
-.big-icon {{ font-size:7rem;line-height:1;filter:drop-shadow(0 8px 24px rgba(0,0,0,0.3));
-  animation:float 4s ease-in-out infinite; }}
-@keyframes float {{ 0%,100% {{ transform:translateY(0); }} 50% {{ transform:translateY(-12px); }} }}
-</style>
-<div class="hero">
-  <div>
-    <div class="label">📍 {selected_loc}　今日天氣</div>
-    <div class="temp">{avg_temp}<span class="unit">°C</span></div>
-    <div class="wx">{dd['Wx'][0]}</div>
-    <div class="meta">
-      <div class="pill">🌡️ {dd['MinT'][0]}° – {dd['MaxT'][0]}°</div>
-      <div class="pill">🌧️ 降雨 {pop0}%</div>
-    </div>
-  </div>
-  <div class="big-icon">{icons[0]}</div>
-</div>"""
-        components.html(hero_html, height=210)
-
-    with col_chart:
-        pop_rows = ""
-        time_labels_3 = ["今日白天", "今晚明晨", "明日白天"]
-        for i in range(3):
-            p = dd["PoP"][i]
-            d = dd["time_short"][i] if dd["time_short"] else ""
-            g = get_pop_gradient(p)
-            pop_rows += f"""
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
-              <div style="font-size:0.72rem;color:#94a3b8;width:58px;text-align:right;flex-shrink:0;line-height:1.3;">{d}</div>
-              <div style="flex:1;height:10px;background:rgba(255,255,255,0.06);border-radius:100px;overflow:hidden;">
-                <div style="width:{p}%;height:100%;background:{g};border-radius:100px;"></div>
-              </div>
-              <div style="font-size:0.82rem;font-weight:700;width:36px;color:#e2e8f0;">{p}%</div>
-            </div>"""
-        chart_html = f"""{COMPONENT_CSS}
-body {{ background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
-  border-radius:18px;padding:24px; }}
-.title {{ font-size:0.75rem;font-weight:700;text-transform:uppercase;
-  letter-spacing:0.1em;color:#64748b;margin-bottom:20px; }}
-.foot {{ margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.05);
-  font-size:0.68rem;color:#475569;text-align:center; }}
-</style>
-<div class="title">☔ 36 小時降雨機率</div>
-{pop_rows}
-<div class="foot">每 12 小時為一預報時段</div>"""
-        components.html(chart_html, height=210)
-
-    # 三時段卡
-    st.markdown("<div style='height:6px;'></div>", unsafe_allow_html=True)
-    cols_bottom = st.columns(3)
-    for i in range(3):
-        with cols_bottom[i]:
-            p = dd["PoP"][i]
-            g = get_pop_gradient(p)
-            c = get_pop_color(p)
-            d = dd["time_short"][i] if dd["time_short"] else ""
-            card_html = f"""{COMPONENT_CSS}
-body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);
-  border-radius:18px;padding:22px 16px;text-align:center; }}
-.lbl {{ font-size:0.75rem;font-weight:700;text-transform:uppercase;
-  letter-spacing:0.1em;color:#64748b;margin-bottom:10px; }}
-.date {{ font-size:0.85rem;color:#94a3b8;margin-bottom:10px; }}
-.icon {{ font-size:2.8rem;margin:8px 0;line-height:1.2; }}
-.temps {{ font-size:1.35rem;font-weight:800;color:#e2e8f0;margin:8px 0;font-variant-numeric:tabular-nums; }}
-.wx {{ font-size:0.82rem;color:#94a3b8;margin-bottom:10px; }}
-.bar-label {{ font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:5px; }}
-.bar-track {{ width:100%;height:6px;background:rgba(255,255,255,0.08);border-radius:100px;overflow:hidden;margin-bottom:6px; }}
-.bar-fill {{ height:100%;border-radius:100px; }}
-.pop-val {{ font-size:1.1rem;font-weight:700;font-variant-numeric:tabular-nums; }}
-</style>
-<div class="lbl">{time_labels_3[i]}</div>
-<div class="date">📅 {d}</div>
-<div class="icon">{icons[i]}</div>
-<div class="temps">{dd['MinT'][i]}° – {dd['MaxT'][i]}°C</div>
-<div class="wx">{dd['Wx'][i]}</div>
-<div class="bar-label">☔ 降雨機率</div>
-<div class="bar-track"><div class="bar-fill" style="width:{p}%;background:{g};"></div></div>
-<div class="pop-val" style="color:{c};">{p}%</div>"""
-            components.html(card_html, height=280)
-
-    # ── 36hr 溫度曲線圖（用真實時間刻度）──
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+    # ── 下拉選單區 (取代側邊欄) ──
+    col_city, col_dist = st.columns(2)
+    cities = [c['locationsName'] for c in weather_data]
+    selected_city = col_city.selectbox("選擇縣市", cities)
+    
+    target_city = next((c for c in weather_data if c['locationsName'] == selected_city), None)
+    districts = [d['locationName'] for d in target_city['location']] if target_city else []
+    selected_dist = col_dist.selectbox("選擇行政區", districts)
+    
+    # 迷你化的 API 來源標示
     st.markdown("""
-    <div class="section-eyebrow">TEMPERATURE TREND</div>
-    <div style="font-size:1.1rem;font-weight:700;color:#f1f5f9;margin-bottom:12px;">📈 近 36 小時溫度趨勢</div>
+    <div style="font-size:0.72rem; color:#64748b; margin-top:-10px; margin-bottom:20px; text-align:right;">
+        💡 資料來源：中央氣象署、人事行政總處、台灣水庫即時水情、Lunar-Python 曆法演算法
+    </div>
     """, unsafe_allow_html=True)
+    
+    # 取得最終選定的區域物件
+    target_loc = next((d for d in target_city['location'] if d['locationName'] == selected_dist), None)
+    display_name = f"{selected_city} {selected_dist}"
+    
+    dd = {"MinT": [], "MaxT": [], "PoP": [], "Wx": [], "time_short": [], "time_full": []}
+    if target_loc:
+        for elem in target_loc['weatherElement']:
+            n = elem['elementName']
+            if n in ["MinT", "MaxT"]:
+                dd[n] = []
+                for t in elem['time'][:3]:
+                    v = t['elementValue'][0]['value']
+                    dd[n].append(int(v) if str(v).lstrip('-').isdigit() else 0)
+            elif n in ["PoP12h", "PoP"]:
+                dd["PoP"] = []
+                for t in elem['time'][:3]:
+                    v = t['elementValue'][0]['value']
+                    dd["PoP"].append(int(v) if str(v).strip().isdigit() else 0)
+            elif n == "Wx":
+                dd["Wx"] = [t['elementValue'][0]['value'] for t in elem['time'][:3]]
+                dd["time_short"] = [t['startTime'][5:10] for t in elem['time'][:3]]
+                dd["time_full"]  = [t['startTime'] for t in elem['time'][:3]]
 
-    if len(dd["MinT"]) >= 3 and len(dd["MaxT"]) >= 3:
+    # 確保資料有成功擷取
+    if len(dd["MinT"]) >= 3 and len(dd["MaxT"]) >= 3 and len(dd["PoP"]) >= 3:
+        icons    = [get_weather_icon(dd["PoP"][i], dd["Wx"][i]) for i in range(3)]
+        hero_bg  = get_hero_bg(dd["PoP"][0], dd["Wx"][0])
+        avg_temp = (dd["MinT"][0] + dd["MaxT"][0]) // 2
+
+        # 警報橫幅 (氣象署警報以縣市為單位)
+        alerts = alert_data.get(selected_city, [])
+        if alerts:
+            st.markdown(f"""<div class="alert-banner alert-danger">
+              <span style="font-size:1.4rem;">🚨</span>
+              <span><strong>天氣警特報</strong>｜{selected_city} 目前發布：<strong>{"、".join(alerts)}</strong>，請多加留意</span>
+            </div>""", unsafe_allow_html=True)
+        else:
+            st.markdown(f"""<div class="alert-banner alert-safe">
+              <span style="font-size:1.3rem;">✅</span>
+              <span><strong>{selected_city}</strong> 目前無重大天氣警特報，天氣狀況良好</span>
+            </div>""", unsafe_allow_html=True)
+
+        # 英雄卡 + 降雨機率
+        col_hero, col_chart = st.columns([7, 3])
+        with col_hero:
+            pop0 = dd["PoP"][0]
+            hero_html = f"""{COMPONENT_CSS}
+    .hero {{ position:relative;overflow:hidden;border-radius:24px;padding:36px 40px;
+      background:{hero_bg};display:flex;align-items:center;justify-content:space-between;
+      box-shadow:0 20px 50px rgba(0,0,0,0.4); }}
+    .hero::before {{ content:'';position:absolute;right:-30px;top:-30px;width:240px;height:240px;
+      border-radius:50%;background:rgba(255,255,255,0.04);pointer-events:none; }}
+    .label {{ font-size:0.82rem;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;
+      color:rgba(255,255,255,0.6);margin-bottom:8px; }}
+    .temp {{ font-size:5.5rem;font-weight:900;color:#fff;line-height:1;letter-spacing:-0.04em;
+      text-shadow:0 4px 30px rgba(0,0,0,0.3); }}
+    .unit {{ font-size:2rem;font-weight:300;opacity:.7;vertical-align:super; }}
+    .wx {{ font-size:1.25rem;color:rgba(255,255,255,0.85);font-weight:500;margin-top:8px; }}
+    .meta {{ display:flex;gap:16px;margin-top:14px; }}
+    .pill {{ background:rgba(255,255,255,0.12);backdrop-filter:blur(8px);
+      border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.9);
+      padding:5px 14px;border-radius:100px;font-size:0.82rem;font-weight:500; }}
+    .big-icon {{ font-size:7rem;line-height:1;filter:drop-shadow(0 8px 24px rgba(0,0,0,0.3));
+      animation:float 4s ease-in-out infinite; }}
+    @keyframes float {{ 0%,100% {{ transform:translateY(0); }} 50% {{ transform:translateY(-12px); }} }}
+    </style>
+    <div class="hero">
+      <div>
+        <div class="label">📍 {display_name}　今日天氣</div>
+        <div class="temp">{avg_temp}<span class="unit">°C</span></div>
+        <div class="wx">{dd['Wx'][0]}</div>
+        <div class="meta">
+          <div class="pill">🌡️ {dd['MinT'][0]}° – {dd['MaxT'][0]}°</div>
+          <div class="pill">🌧️ 降雨 {pop0}%</div>
+        </div>
+      </div>
+      <div class="big-icon">{icons[0]}</div>
+    </div>"""
+            components.html(hero_html, height=210)
+
+        with col_chart:
+            pop_rows = ""
+            time_labels_3 = ["時段一", "時段二", "時段三"]
+            for i in range(3):
+                p = dd["PoP"][i]
+                d = dd["time_short"][i] if dd["time_short"] else ""
+                g = get_pop_gradient(p)
+                pop_rows += f"""
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+                  <div style="font-size:0.72rem;color:#94a3b8;width:58px;text-align:right;flex-shrink:0;line-height:1.3;">{d}</div>
+                  <div style="flex:1;height:10px;background:rgba(255,255,255,0.06);border-radius:100px;overflow:hidden;">
+                    <div style="width:{p}%;height:100%;background:{g};border-radius:100px;"></div>
+                  </div>
+                  <div style="font-size:0.82rem;font-weight:700;width:36px;color:#e2e8f0;">{p}%</div>
+                </div>"""
+            chart_html = f"""{COMPONENT_CSS}
+    body {{ background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
+      border-radius:18px;padding:24px; }}
+    .title {{ font-size:0.75rem;font-weight:700;text-transform:uppercase;
+      letter-spacing:0.1em;color:#64748b;margin-bottom:20px; }}
+    .foot {{ margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.05);
+      font-size:0.68rem;color:#475569;text-align:center; }}
+    </style>
+    <div class="title">☔ 36 小時降雨機率</div>
+    {pop_rows}
+    <div class="foot">每 12 小時為一預報時段</div>"""
+            components.html(chart_html, height=210)
+
+        # 三時段卡
+        st.markdown("<div style='height:6px;'></div>", unsafe_allow_html=True)
+        cols_bottom = st.columns(3)
+        for i in range(3):
+            with cols_bottom[i]:
+                p = dd["PoP"][i]
+                g = get_pop_gradient(p)
+                c = get_pop_color(p)
+                d = dd["time_short"][i] if dd["time_short"] else ""
+                card_html = f"""{COMPONENT_CSS}
+    body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);
+      border-radius:18px;padding:22px 16px;text-align:center; }}
+    .lbl {{ font-size:0.75rem;font-weight:700;text-transform:uppercase;
+      letter-spacing:0.1em;color:#64748b;margin-bottom:10px; }}
+    .date {{ font-size:0.85rem;color:#94a3b8;margin-bottom:10px; }}
+    .icon {{ font-size:2.8rem;margin:8px 0;line-height:1.2; }}
+    .temps {{ font-size:1.35rem;font-weight:800;color:#e2e8f0;margin:8px 0;font-variant-numeric:tabular-nums; }}
+    .wx {{ font-size:0.82rem;color:#94a3b8;margin-bottom:10px; }}
+    .bar-label {{ font-size:0.72rem;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:5px; }}
+    .bar-track {{ width:100%;height:6px;background:rgba(255,255,255,0.08);border-radius:100px;overflow:hidden;margin-bottom:6px; }}
+    .bar-fill {{ height:100%;border-radius:100px; }}
+    .pop-val {{ font-size:1.1rem;font-weight:700;font-variant-numeric:tabular-nums; }}
+    </style>
+    <div class="lbl">{time_labels_3[i]}</div>
+    <div class="date">📅 {d}</div>
+    <div class="icon">{icons[i]}</div>
+    <div class="temps">{dd['MinT'][i]}° – {dd['MaxT'][i]}°C</div>
+    <div class="wx">{dd['Wx'][i]}</div>
+    <div class="bar-label">☔ 降雨機率</div>
+    <div class="bar-track"><div class="bar-fill" style="width:{p}%;background:{g};"></div></div>
+    <div class="pop-val" style="color:{c};">{p}%</div>"""
+                components.html(card_html, height=280)
+
+        # ── 36hr 溫度曲線圖（用真實時間刻度）──
+        st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class="section-eyebrow">TEMPERATURE TREND</div>
+        <div style="font-size:1.1rem;font-weight:700;color:#f1f5f9;margin-bottom:12px;">📈 近 36 小時溫度趨勢</div>
+        """, unsafe_allow_html=True)
+
         # 解析真實時間標籤（取月/日 時:分）
         time_tick_labels = []
         for tf in dd["time_full"]:
@@ -524,7 +512,6 @@ body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08
         plt.rcParams['font.family'] = 'DejaVu Sans'
         plt.rcParams['axes.unicode_minus'] = False
 
-        # 先存獨立變數，避免後續迴圈覆蓋 dd
         wx_labels  = list(dd['Wx'])
         pop_labels = list(dd['PoP'])
 
@@ -548,7 +535,7 @@ body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08
                 xy=(i, y_max[i]), xytext=(0, 16), textcoords='offset points',
                 ha='center', va='bottom', fontsize=13, color='#fca5a5', fontweight='bold',
                 arrowprops=dict(arrowstyle='-', color='#f87171', lw=1, alpha=0.3))
-            # 最低溫 + 降雨機率（PoP 是數字，安全）
+            # 最低溫 + 降雨機率
             ax.annotate(f"{y_min[i]}\u00b0C  PoP {pop_labels[i]}%",
                 xy=(i, y_min[i]), xytext=(0, -20), textcoords='offset points',
                 ha='center', va='top', fontsize=11, color='#93c5fd', fontweight='bold',
@@ -569,7 +556,7 @@ body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08
         st.pyplot(fig, use_container_width=True)
         plt.close(fig)
 
-        # 圖表下方補天氣描述（HTML emoji，不依賴字型）
+        # 圖表下方補天氣描述
         wx_row_html = "".join([
             f'<div style="flex:1;text-align:center;">'
             f'<div style="font-size:1.6rem;margin-bottom:4px;">{get_weather_icon(pop_labels[i], wx_labels[i])}</div>'
@@ -582,72 +569,69 @@ body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08
             height=75
         )
 
-    # ── 一週天氣預報 ──
-    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class="section-eyebrow">7-DAY FORECAST</div>
-    <div style="font-size:1.1rem;font-weight:700;color:#f1f5f9;margin-bottom:12px;">📅 {selected_loc} 未來一週天氣預報</div>
-    """, unsafe_allow_html=True)
+        # ── 一週天氣預報 (基於同樣的 F-D0047-091 解析) ──
+        st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="section-eyebrow">7-DAY FORECAST</div>
+        <div style="font-size:1.1rem;font-weight:700;color:#f1f5f9;margin-bottom:12px;">📅 {display_name} 未來一週天氣預報</div>
+        """, unsafe_allow_html=True)
 
-    if weekly_weather_data:
-        target_weekly = next((loc for loc in weekly_weather_data if loc['locationName'] == selected_loc), None)
-        if target_weekly:
-            daily = {}
-            for elem in target_weekly['weatherElement']:
-                ename = elem['elementName']
-                if ename in ["Wx", "MinT", "MaxT"]:
-                    for t in elem['time']:
-                        date_str = str(t['startTime'])[:10]
-                        if date_str not in daily:
-                            daily[date_str] = {'MinT': 999, 'MaxT': -999, 'Wx': ''}
-                        try: val = t['parameter']['parameterName']
-                        except: val = ""
-                        if ename == "MinT" and str(val).isdigit():
-                            daily[date_str]['MinT'] = min(daily[date_str]['MinT'], int(val))
-                        elif ename == "MaxT" and str(val).isdigit():
-                            daily[date_str]['MaxT'] = max(daily[date_str]['MaxT'], int(val))
-                        elif ename == "Wx" and not daily[date_str]['Wx']:
-                            daily[date_str]['Wx'] = val
+        daily = {}
+        for elem in target_loc['weatherElement']:
+            ename = elem['elementName']
+            if ename in ["Wx", "MinT", "MaxT"]:
+                for t in elem['time']:
+                    date_str = str(t['startTime'])[:10]
+                    if date_str not in daily:
+                        daily[date_str] = {'MinT': 999, 'MaxT': -999, 'Wx': ''}
+                    val = t['elementValue'][0]['value']
+                    if ename == "MinT" and str(val).lstrip('-').isdigit():
+                        daily[date_str]['MinT'] = min(daily[date_str]['MinT'], int(val))
+                    elif ename == "MaxT" and str(val).lstrip('-').isdigit():
+                        daily[date_str]['MaxT'] = max(daily[date_str]['MaxT'], int(val))
+                    elif ename == "Wx" and not daily[date_str]['Wx']:
+                        daily[date_str]['Wx'] = val
 
-            dates = sorted(daily.keys())[:7]
-            if dates:
-                # 星期對照
-                weekday_map = ["一", "二", "三", "四", "五", "六", "日"]
-                week_cols = st.columns(len(dates))
-                for i, d in enumerate(dates):
-                    with week_cols[i]:
-                        dd2 = daily[d]
-                        mm_dd = d[5:10].replace("-", "/")
-                        wx   = dd2['Wx']
-                        mn   = dd2['MinT'] if dd2['MinT'] != 999  else "--"
-                        mx   = dd2['MaxT'] if dd2['MaxT'] != -999 else "--"
-                        ico  = get_weather_icon(30, wx)
-                        try:
-                            dt_obj = datetime.datetime.strptime(d, "%Y-%m-%d")
-                            wday   = weekday_map[dt_obj.weekday()]
-                            is_weekend = dt_obj.weekday() >= 5
-                        except:
-                            wday = ""; is_weekend = False
-                        wday_color = "#f87171" if is_weekend else "#94a3b8"
+        dates = sorted(daily.keys())[:7]
+        if dates:
+            weekday_map = ["一", "二", "三", "四", "五", "六", "日"]
+            week_cols = st.columns(len(dates))
+            for i, d in enumerate(dates):
+                with week_cols[i]:
+                    dd2 = daily[d]
+                    mm_dd = d[5:10].replace("-", "/")
+                    wx   = dd2['Wx']
+                    mn   = dd2['MinT'] if dd2['MinT'] != 999  else "--"
+                    mx   = dd2['MaxT'] if dd2['MaxT'] != -999 else "--"
+                    ico  = get_weather_icon(30, wx)
+                    try:
+                        dt_obj = datetime.datetime.strptime(d, "%Y-%m-%d")
+                        wday   = weekday_map[dt_obj.weekday()]
+                        is_weekend = dt_obj.weekday() >= 5
+                    except:
+                        wday = ""; is_weekend = False
+                    wday_color = "#f87171" if is_weekend else "#94a3b8"
 
-                        wcard = f"""{COMPONENT_CSS}
-body {{ background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
-  border-radius:16px;padding:16px 10px;text-align:center; }}
-.wday {{ font-size:0.72rem;font-weight:700;color:{wday_color};
-  text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px; }}
-.date {{ font-size:0.9rem;font-weight:700;color:#e2e8f0;margin-bottom:8px; }}
-.ico {{ font-size:2.2rem;margin:6px 0;line-height:1.2; }}
-.temps {{ font-size:0.95rem;font-weight:700;color:#e2e8f0;margin:6px 0;
-  font-variant-numeric:tabular-nums; }}
-.wx {{ font-size:0.72rem;color:#64748b;line-height:1.4;
-  min-height:32px;display:flex;align-items:center;justify-content:center; }}
-</style>
-<div class="wday">週{wday}</div>
-<div class="date">{mm_dd}</div>
-<div class="ico">{ico}</div>
-<div class="temps">{mn}° – {mx}°C</div>
-<div class="wx">{wx}</div>"""
-                        components.html(wcard, height=190)
+                    wcard = f"""{COMPONENT_CSS}
+    body {{ background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
+      border-radius:16px;padding:16px 10px;text-align:center; }}
+    .wday {{ font-size:0.72rem;font-weight:700;color:{wday_color};
+      text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px; }}
+    .date {{ font-size:0.9rem;font-weight:700;color:#e2e8f0;margin-bottom:8px; }}
+    .ico {{ font-size:2.2rem;margin:6px 0;line-height:1.2; }}
+    .temps {{ font-size:0.95rem;font-weight:700;color:#e2e8f0;margin:6px 0;
+      font-variant-numeric:tabular-nums; }}
+    .wx {{ font-size:0.72rem;color:#64748b;line-height:1.4;
+      min-height:32px;display:flex;align-items:center;justify-content:center; }}
+    </style>
+    <div class="wday">週{wday}</div>
+    <div class="date">{mm_dd}</div>
+    <div class="ico">{ico}</div>
+    <div class="temps">{mn}° – {mx}°C</div>
+    <div class="wx">{wx}</div>"""
+                    components.html(wcard, height=190)
+    else:
+        st.warning("暫時無法解析該行政區之預報細節。")
 
 
 # ─────────────────────────────────────────────
