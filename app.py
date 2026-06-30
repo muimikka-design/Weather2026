@@ -81,6 +81,34 @@ html, body, [class*="css"] { font-family: 'Noto Sans TC', sans-serif !important;
 .stat-icon-ring { width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:1.6rem;flex-shrink:0; }
 .stat-value { font-size:1.6rem;font-weight:800;color:#f1f5f9;line-height:1;font-variant-numeric:tabular-nums; }
 .stat-label { font-size:0.78rem;color:#64748b;margin-top:3px;text-transform:uppercase;letter-spacing:0.06em; }
+
+/* ── 行動裝置：把側欄資訊收進第一頁內的小卡 ── */
+.mobile-location-card {
+    display: none;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+}
+.mobile-location-card .mlc-title {
+    font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.12em; color: #475569; margin-bottom: 10px;
+}
+.mobile-data-source {
+    font-size: 0.68rem; color: #475569; margin-top: 8px;
+    line-height: 1.6; letter-spacing: 0.01em;
+}
+@media (max-width: 768px) {
+    .mobile-location-card { display: block; }
+    [data-testid="stSidebar"] { display: none !important; }
+}
+
+/* 桌面版資料來源（側欄內）維持原樣，但簡化為一排小字 */
+.sidebar-source-line {
+    font-size: 0.68rem; color: #475569; line-height: 1.7;
+    margin-top: 10px; letter-spacing: 0.01em;
+}
 """
 st.markdown(f"<style>{SHARED_CSS}</style>", unsafe_allow_html=True)
 
@@ -95,6 +123,7 @@ body { background: transparent; }
 # =============================================
 @st.cache_data(ttl=3600)
 def fetch_weather_data():
+    """全國 22 縣市，今明 36 小時天氣預報（縣市層級）"""
     url = "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/F-C0032-001?Authorization=CWA-5BC80F5C-CB99-4081-94E0-AAD02A6D95C1&downloadType=WEB&format=JSON"
     try:
         r = requests.get(url, verify=False, timeout=10)
@@ -103,11 +132,56 @@ def fetch_weather_data():
 
 @st.cache_data(ttl=3600)
 def fetch_weekly_weather_data():
+    """全國 22 縣市，未來一週天氣預報（縣市層級）"""
     url = "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/F-C0032-005?Authorization=CWA-5BC80F5C-CB99-4081-94E0-AAD02A6D95C1&downloadType=WEB&format=JSON"
     try:
         r = requests.get(url, verify=False, timeout=10)
         return r.json()['cwaopendata']['dataset']['location']
     except: return []
+
+# 中央氣象署 F-D0047 單一縣市鄉鎮預報 API 代碼對照表
+# 每個縣市有獨立的 dataid，用 rest/datastore 端點 + LocationName 帶入「鄉鎮市區名稱」查詢
+COUNTY_TO_FD0047 = {
+    "宜蘭縣": "F-D0047-001", "桃園市": "F-D0047-005", "新竹縣": "F-D0047-009",
+    "苗栗縣": "F-D0047-013", "彰化縣": "F-D0047-017", "南投縣": "F-D0047-021",
+    "雲林縣": "F-D0047-025", "嘉義縣": "F-D0047-029", "屏東縣": "F-D0047-033",
+    "臺東縣": "F-D0047-037", "台東縣": "F-D0047-037",
+    "花蓮縣": "F-D0047-041", "澎湖縣": "F-D0047-045",
+    "基隆市": "F-D0047-049", "新竹市": "F-D0047-053", "嘉義市": "F-D0047-057",
+    "臺北市": "F-D0047-061", "台北市": "F-D0047-061",
+    "高雄市": "F-D0047-065", "新北市": "F-D0047-069",
+    "臺中市": "F-D0047-073", "台中市": "F-D0047-073",
+    "臺南市": "F-D0047-077", "台南市": "F-D0047-077",
+    "連江縣": "F-D0047-081", "金門縣": "F-D0047-085",
+}
+
+@st.cache_data(ttl=3600)
+def fetch_township_weather_data(county_name):
+    """
+    鄉鎮天氣預報（單一縣市版）：取得該縣市「所有鄉鎮市區」的逐 3 小時天氣預報。
+    正確端點為 /api/v1/rest/datastore/{dataid}（注意不是 /fileapi/v1/opendataapi/，
+    後者是檔案下載版端點，不支援查詢參數篩選）。
+    不帶 LocationName 參數時，預設回傳該縣市「全部」鄉鎮市區資料。
+    """
+    dataid = COUNTY_TO_FD0047.get(county_name)
+    if not dataid:
+        return []
+    url = (
+        f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/{dataid}"
+        "?Authorization=CWA-5BC80F5C-CB99-4081-94E0-AAD02A6D95C1"
+        "&format=JSON"
+    )
+    try:
+        r = requests.get(url, verify=False, timeout=15)
+        data = r.json()
+        # 正確結構：records -> Locations[0] -> Location（鄉鎮清單，注意大寫開頭）
+        records = data.get('records', {})
+        locations_list = records.get('Locations', [])
+        if not locations_list:
+            return []
+        return locations_list[0].get('Location', [])
+    except:
+        return []
 
 @st.cache_data(ttl=600)
 def fetch_alert_data():
@@ -238,8 +312,6 @@ NAYIN_S2T = {
     "石榴木": "石榴木", "白蜡金": "白蠟金",
 }
 
-# lunar_python 套件內建節日清單含大量簡體字與中國大陸專屬政治/civic 紀念日（如建黨節、國慶節等），
-# 這裡僅白名單保留與台灣生活相關、且日期計算正確的傳統節日與國際通用節日，並轉換為繁體顯示。
 FESTIVAL_MAP = {
     "腊八节": "臘八節", "祭灶日": "祭灶日（小年）", "除夕": "除夕",
     "春节": "春節（農曆新年）", "元宵节": "元宵節", "天穿节": "天穿節（客家天穿日）",
@@ -251,7 +323,6 @@ FESTIVAL_MAP = {
     "平安夜": "平安夜", "圣诞节": "聖誕節",
 }
 
-# 台灣專屬固定日期節日／紀念日（lunar_python 未收錄，或計算出的日期與台灣習慣不同，例如父親節、兒童節）
 TW_FIXED_HOLIDAYS = {
     (2, 28): "228和平紀念日", (3, 29): "青年節", (4, 4): "兒童節",
     (8, 8): "父親節", (9, 28): "教師節（孔子誕辰紀念日）",
@@ -260,7 +331,6 @@ TW_FIXED_HOLIDAYS = {
 }
 
 def get_tw_festivals(lunar_obj, month, day, jieqi_today):
-    """整合農曆/國曆節日清單（白名單過濾＋簡轉繁）與台灣固定節日、節氣，回傳節日字串清單。"""
     festivals = []
     try:
         solar_obj = lunar_obj.getSolar()
@@ -292,31 +362,39 @@ if not weather_data:
     st.error("氣象資料載入失敗，請稍後再試。")
     st.stop()
 
+available_locations = [loc['locationName'] for loc in weather_data]
+
+# 資料來源項目（共用給側欄與手機版小字）
+DATA_SOURCES = [
+    ("🌐", "中央氣象署"), ("📋", "人事行政總處"),
+    ("💧", "台灣水庫水情"), ("📅", "Lunar-Python"),
+]
+data_source_line = "　·　".join([f"{e} {t}" for e, t in DATA_SOURCES])
+
 # =============================================
-# 側邊欄
+# 側邊欄（桌面版顯示；手機版由 CSS 隱藏，改用頁內小卡）
 # =============================================
 with st.sidebar:
     st.markdown("""
     <div style="padding:12px 0 20px;">
       <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:#475569;margin-bottom:6px;">系統設定</div>
-      <div style="font-size:1.1rem;font-weight:800;color:#f1f5f9;">板控制台</div>
+      <div style="font-size:1.1rem;font-weight:800;color:#f1f5f9;">儀表板控制台</div>
     </div>""", unsafe_allow_html=True)
-    selected_loc = st.selectbox("查詢縣市", [loc['locationName'] for loc in weather_data])
-    st.markdown("<hr style='border-color:rgba(255,255,255,0.06);margin:20px 0;'>", unsafe_allow_html=True)
-    for emoji, title, src in [
-        ("🌐", "中央氣象署", "天氣預報 & 特報"),
-        ("📋", "人事行政總處", "停班停課公告"),
-        ("💧", "台灣水庫水情", "即時蓄水資料"),
-        ("📅", "Lunar-Python", "農民曆演算法"),
-    ]:
-        st.markdown(f"""
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
-          <div style="font-size:1.1rem;">{emoji}</div>
-          <div>
-            <div style="font-size:0.82rem;font-weight:600;color:#94a3b8;">{title}</div>
-            <div style="font-size:0.72rem;color:#475569;">{src}</div>
-          </div>
-        </div>""", unsafe_allow_html=True)
+
+    selected_loc = st.selectbox("查詢縣市", available_locations, key="sidebar_county")
+
+    # 行政區二級選單（依縣市動態載入）
+    township_data = fetch_township_weather_data(selected_loc)
+    township_names = [t['LocationName'] for t in township_data] if township_data else []
+    if township_names:
+        selected_township = st.selectbox("查詢行政區", township_names, key="sidebar_township")
+    else:
+        selected_township = None
+        st.caption("此縣市暫無行政區細項資料")
+
+    # 資料來源：合併成一排小字，放在縣市欄位底下
+    st.markdown(f"""<div class="sidebar-source-line">資料來源：{data_source_line}</div>""",
+                unsafe_allow_html=True)
 
 # =============================================
 # 頁首橫幅
@@ -339,7 +417,7 @@ st.markdown("""
       font-size:2.2rem;box-shadow:0 0 30px rgba(56,189,248,0.3);flex-shrink:0;">🌏</div>
     <div>
       <div style="color:#fff;font-size:1.9rem;font-weight:900;letter-spacing:-0.02em;text-shadow:0 2px 20px rgba(0,0,0,0.3);">
-        天氣資訊站</div>
+        台灣生活氣象與防災儀表板</div>
       <div style="color:rgba(255,255,255,0.65);font-size:0.88rem;margin-top:4px;letter-spacing:0.05em;">
         TAIWAN WEATHER &amp; DISASTER PREVENTION DASHBOARD</div>
     </div>
@@ -363,7 +441,30 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # 分頁 1：氣象預報
 # ─────────────────────────────────────────────
 with tab1:
-    target_loc = next(loc for loc in weather_data if loc['locationName'] == selected_loc)
+    # ── 手機版專用：把縣市/行政區選擇器搬進這裡（CSS 已隱藏側欄）──
+    st.markdown('<div class="mobile-location-card">', unsafe_allow_html=True)
+    st.markdown('<div class="mlc-title">📍 查詢地區</div>', unsafe_allow_html=True)
+    mcol1, mcol2 = st.columns(2)
+    with mcol1:
+        mobile_selected_loc = st.selectbox(
+            "縣市", available_locations,
+            index=available_locations.index(selected_loc) if selected_loc in available_locations else 0,
+            key="mobile_county", label_visibility="collapsed"
+        )
+    with mcol2:
+        mobile_township_data = fetch_township_weather_data(mobile_selected_loc)
+        mobile_township_names = [t['LocationName'] for t in mobile_township_data] if mobile_township_data else ["—"]
+        mobile_selected_township = st.selectbox(
+            "行政區", mobile_township_names, key="mobile_township", label_visibility="collapsed"
+        )
+    st.markdown(f'<div class="mobile-data-source">資料來源：{data_source_line}</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # 手機版選的縣市優先生效（因為桌面版側欄在手機上看不到）
+    # 用 session_state 判斷使用者上次互動的是哪個 widget，這裡簡化：以 mobile 為準（手機畫面才會顯示用得到）
+    active_loc = mobile_selected_loc if mobile_selected_loc != selected_loc else selected_loc
+
+    target_loc = next(loc for loc in weather_data if loc['locationName'] == active_loc)
     dd = {"MinT": [], "MaxT": [], "PoP": [], "Wx": [], "time_short": [], "time_full": []}
     for elem in target_loc['weatherElement']:
         n = elem['elementName']
@@ -380,17 +481,49 @@ with tab1:
     avg_temp = (dd["MinT"][0] + dd["MaxT"][0]) // 2
 
     # 警報橫幅
-    alerts = alert_data.get(selected_loc, [])
+    alerts = alert_data.get(active_loc, [])
     if alerts:
         st.markdown(f"""<div class="alert-banner alert-danger">
           <span style="font-size:1.4rem;">🚨</span>
-          <span><strong>天氣警特報</strong>｜{selected_loc} 目前發布：<strong>{"、".join(alerts)}</strong>，請多加留意</span>
+          <span><strong>天氣警特報</strong>｜{active_loc} 目前發布：<strong>{"、".join(alerts)}</strong>，請多加留意</span>
         </div>""", unsafe_allow_html=True)
     else:
         st.markdown(f"""<div class="alert-banner alert-safe">
           <span style="font-size:1.3rem;">✅</span>
-          <span><strong>{selected_loc}</strong> 目前無重大天氣警特報，天氣狀況良好</span>
+          <span><strong>{active_loc}</strong> 目前無重大天氣警特報，天氣狀況良好</span>
         </div>""", unsafe_allow_html=True)
+
+    # 行政區細項小卡（若有選擇行政區資料）
+    active_township_data = mobile_township_data if mobile_township_data else township_data
+    active_township_name = mobile_selected_township if mobile_township_data else selected_township
+    if active_township_data and active_township_name and active_township_name != "—":
+        twn = next((t for t in active_township_data if t['LocationName'] == active_township_name), None)
+        if twn:
+            twn_wx = twn_pop = twn_t = None
+            for elem in twn.get('WeatherElement', []):
+                ename = elem.get('ElementName', '')
+                times = elem.get('Time', [])
+                if not times: continue
+                first_time = times[0]
+                elem_val = first_time.get('ElementValue', [{}])[0]
+                if '天氣現象' in ename:
+                    twn_wx = elem_val.get('Weather', '')
+                elif '3小時降雨機率' in ename or '12小時降雨機率' in ename:
+                    twn_pop = elem_val.get('ProbabilityOfPrecipitation', '')
+                elif '溫度' in ename and '體感' not in ename:
+                    twn_t = elem_val.get('Temperature', '')
+            if twn_wx:
+                st.markdown(f"""
+                <div style="display:flex;align-items:center;gap:10px;background:rgba(14,165,233,0.08);
+                  border:1px solid rgba(14,165,233,0.2);border-radius:12px;padding:10px 16px;margin-bottom:16px;">
+                  <span style="font-size:1.1rem;">📍</span>
+                  <span style="font-size:0.85rem;color:#94a3b8;">
+                    <strong style="color:#e2e8f0;">{active_loc} {active_township_name}</strong>
+                    　現在 {twn_wx}
+                    {f'　溫度 {twn_t}°C' if twn_t else ''}
+                    {f'　降雨機率 {twn_pop}%' if twn_pop else ''}
+                  </span>
+                </div>""", unsafe_allow_html=True)
 
     # 英雄卡 + 降雨機率
     col_hero, col_chart = st.columns([7, 3])
@@ -418,7 +551,7 @@ with tab1:
 </style>
 <div class="hero">
   <div>
-    <div class="label">📍 {selected_loc}　今日天氣</div>
+    <div class="label">📍 {active_loc}　今日天氣</div>
     <div class="temp">{avg_temp}<span class="unit">°C</span></div>
     <div class="wx">{dd['Wx'][0]}</div>
     <div class="meta">
@@ -491,7 +624,7 @@ body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08
 <div class="pop-val" style="color:{c};">{p}%</div>"""
             components.html(card_html, height=280)
 
-    # ── 36hr 溫度曲線圖（用真實時間刻度）──
+    # ── 36hr 溫度曲線圖 ──
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
     st.markdown("""
     <div class="section-eyebrow">TEMPERATURE TREND</div>
@@ -499,7 +632,6 @@ body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08
     """, unsafe_allow_html=True)
 
     if len(dd["MinT"]) >= 3 and len(dd["MaxT"]) >= 3:
-        # 解析真實時間標籤（取月/日 時:分）
         time_tick_labels = []
         for tf in dd["time_full"]:
             try:
@@ -520,11 +652,9 @@ body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08
         import matplotlib
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
-        # Streamlit Cloud Linux 環境只有 DejaVu Sans，完全避免中文字型
         plt.rcParams['font.family'] = 'DejaVu Sans'
         plt.rcParams['axes.unicode_minus'] = False
 
-        # 先存獨立變數，避免後續迴圈覆蓋 dd
         wx_labels  = list(dd['Wx'])
         pop_labels = list(dd['PoP'])
 
@@ -532,23 +662,17 @@ body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08
         fig.patch.set_facecolor('#1e293b')
         ax.set_facecolor('#1e293b')
 
-        # 填色區域
         ax.fill_between(x_new, y_min_s, y_max_s, color='#fef08a', alpha=0.10, zorder=1)
-        # 曲線
         ax.plot(x_new, y_max_s, color='#f87171', linewidth=3.5, alpha=0.9, zorder=2)
         ax.plot(x_new, y_min_s, color='#60a5fa', linewidth=3.5, alpha=0.9, zorder=2)
-        # 節點
         ax.scatter(x, y_max, s=130, color='#ef4444', edgecolors='#1e293b', linewidths=2.5, zorder=4)
         ax.scatter(x, y_min, s=130, color='#3b82f6', edgecolors='#1e293b', linewidths=2.5, zorder=4)
 
-        # 標籤：只用 ASCII + 數字，完全不含中文，避免 tofu 方塊
         for i in range(3):
-            # 最高溫（只顯示溫度數字）
             ax.annotate(f"{y_max[i]}\u00b0C",
                 xy=(i, y_max[i]), xytext=(0, 16), textcoords='offset points',
                 ha='center', va='bottom', fontsize=13, color='#fca5a5', fontweight='bold',
                 arrowprops=dict(arrowstyle='-', color='#f87171', lw=1, alpha=0.3))
-            # 最低溫 + 降雨機率（PoP 是數字，安全）
             ax.annotate(f"{y_min[i]}\u00b0C  PoP {pop_labels[i]}%",
                 xy=(i, y_min[i]), xytext=(0, -20), textcoords='offset points',
                 ha='center', va='top', fontsize=11, color='#93c5fd', fontweight='bold',
@@ -569,7 +693,6 @@ body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08
         st.pyplot(fig, use_container_width=True)
         plt.close(fig)
 
-        # 圖表下方補天氣描述（HTML emoji，不依賴字型）
         wx_row_html = "".join([
             f'<div style="flex:1;text-align:center;">'
             f'<div style="font-size:1.6rem;margin-bottom:4px;">{get_weather_icon(pop_labels[i], wx_labels[i])}</div>'
@@ -586,11 +709,11 @@ body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08
     st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
     st.markdown(f"""
     <div class="section-eyebrow">7-DAY FORECAST</div>
-    <div style="font-size:1.1rem;font-weight:700;color:#f1f5f9;margin-bottom:12px;">📅 {selected_loc} 未來一週天氣預報</div>
+    <div style="font-size:1.1rem;font-weight:700;color:#f1f5f9;margin-bottom:12px;">📅 {active_loc} 未來一週天氣預報</div>
     """, unsafe_allow_html=True)
 
     if weekly_weather_data:
-        target_weekly = next((loc for loc in weekly_weather_data if loc['locationName'] == selected_loc), None)
+        target_weekly = next((loc for loc in weekly_weather_data if loc['locationName'] == active_loc), None)
         if target_weekly:
             daily = {}
             for elem in target_weekly['weatherElement']:
@@ -611,7 +734,6 @@ body {{ background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08
 
             dates = sorted(daily.keys())[:7]
             if dates:
-                # 星期對照
                 weekday_map = ["一", "二", "三", "四", "五", "六", "日"]
                 week_cols = st.columns(len(dates))
                 for i, d in enumerate(dates):
@@ -784,7 +906,6 @@ with tab4:
     with col_pick:
         selected_date = st.date_input("選擇查詢日期", now_tw.date(), label_visibility="collapsed")
 
-    # 農民曆計算
     solar_dt = datetime.datetime(selected_date.year, selected_date.month, selected_date.day)
     lunar    = Lunar.fromDate(solar_dt)
     y, m, d  = selected_date.year, selected_date.month, selected_date.day
@@ -792,13 +913,10 @@ with tab4:
     lunar_str  = f"農曆 {lunar.getMonthInChinese()}月{lunar.getDayInChinese()} ({lunar.getYearInGanZhi()}年)"
     yi_list    = lunar.getDayYi()
     ji_list    = lunar.getDayJi()
-    yi_str     = "、".join(yi_list) if yi_list else "諸事不宜"
-    ji_str     = "、".join(ji_list) if ji_list else "無"
     chong_sha  = f"沖{lunar.getChongDesc()} 煞{lunar.getSha()}"
     jq         = lunar.getJieQi()
     jieqi_str  = f"今日 {jq}" if jq else lunar.getPrevJieQi(True).getName()
 
-    # 八字（年柱／月柱／日柱，因未提供出生時辰，故不含時柱，僅供參考）與當日納音五行
     year_gz   = lunar.getYearInGanZhi()
     month_gz  = lunar.getMonthInGanZhi()
     day_gz    = lunar.getDayInGanZhi()
@@ -806,11 +924,9 @@ with tab4:
     nayin_raw = lunar.getDayNaYin()
     nayin_str = NAYIN_S2T.get(nayin_raw, nayin_raw)
 
-    # 節日與紀念日自動判斷（例如端午節、中秋節等）
     festival_list = get_tw_festivals(lunar, m, d, jq)
     festival_str  = "、".join(festival_list)
 
-    # 星期
     weekday_zh = ["一","二","三","四","五","六","日"]
     try:
         wday_str = f"星期{weekday_zh[selected_date.weekday()]}"
@@ -819,7 +935,6 @@ with tab4:
         wday_str = ""; is_wkend = False
     wday_color = "#f87171" if is_wkend else "#94a3b8"
 
-    # 宜忌 HTML 列
     yi_items = "".join([f'<span class="tag yi-tag">{item}</span>' for item in (yi_list[:6] if yi_list else ["諸事不宜"])])
     ji_items = "".join([f'<span class="tag ji-tag">{item}</span>' for item in (ji_list[:6] if ji_list else ["無"])])
 
@@ -857,6 +972,14 @@ body {{ display:flex;justify-content:center;padding:8px 0; }}
 .yi-tag {{ background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.25);color:#86efac; }}
 .ji-tag {{ background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);color:#fca5a5; }}
 .mpill-festival {{ background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);color:#fbbf24; }}
+/* 手機版響應式 */
+@media (max-width: 400px) {{
+  .body {{ flex-direction:column;align-items:flex-start;padding:18px 20px;gap:12px; }}
+  .day-num {{ font-size:5rem; }}
+  .card-header {{ padding:14px 18px; }}
+  .section {{ padding:14px 18px; }}
+  .tag {{ font-size:0.75rem;padding:4px 10px; }}
+}}
 </style>
 <div class="card">
   <div class="card-header">
@@ -893,4 +1016,10 @@ body {{ display:flex;justify-content:center;padding:8px 0; }}
   </div>
 </div>"""
 
-    components.html(almanac_html, height=600, scrolling=True)
+    # 動態計算高度，避免內容被截斷
+    yi_count = len(yi_list) if yi_list else 1
+    ji_count = len(ji_list) if ji_list else 1
+    yi_rows = max(1, (min(yi_count, 8) + 2) // 3)
+    ji_rows = max(1, (min(ji_count, 8) + 2) // 3)
+    dynamic_height = 480 + (yi_rows - 1) * 42 + (ji_rows - 1) * 42
+    components.html(almanac_html, height=dynamic_height, scrolling=False)
