@@ -418,15 +418,15 @@ st.markdown("""
     <div>
       <div style="color:#fff;font-size:1.9rem;font-weight:900;letter-spacing:-0.02em;text-shadow:0 2px 20px rgba(0,0,0,0.3);">
         天氣資訊站</div>
-      # <div style="color:rgba(255,255,255,0.65);font-size:0.88rem;margin-top:4px;letter-spacing:0.05em;">
-        TAIWAN WEATHER &amp; DISASTER PREVENTION DASHBOARD</div>
+      <div style="color:rgba(255,255,255,0.65);font-size:0.88rem;margin-top:4px;letter-spacing:0.05em;">
+
     </div>
     <div style="margin-left:auto;background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.4);
       color:#34d399;padding:6px 16px;border-radius:100px;font-size:0.78rem;font-weight:600;
       letter-spacing:0.05em;white-space:nowrap;">🟢 即時資料</div>
   </div>
 </div>""", unsafe_allow_html=True)
-
+#        TAIWAN WEATHER &amp; DISASTER PREVENTION DASHBOARD</div>
 # =============================================
 # 分頁
 # =============================================
